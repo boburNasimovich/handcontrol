@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Interactive Neon Particle Gallery</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+      font-family: 'Poppins', sans-serif;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #skeleton {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+    }
+
+    #info {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      text-align: right;
+      color: white;
+      font-size: clamp(12px, 2vw, 16px);
+      line-height: 1.6;
+    }
+
+    #info span {
+      color: #00ffff;
+      font-weight: 600;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="info">
+    <div><span>🤏 Pinch</span> — Katta / Kichik</div>
+    <div><span>✌ Ikki barmoq</span> — Shakl almashtirish</div>
+    <div><span>✋ Qo'l surish</span> — Aylantirish</div>
+    <p>created by <a style="color: beige;" href="https://boburnasimovich.uz">Bobur</a></p>
+
+  </div>
+
+  <video id="video" autoplay playsinline style="display:none;"></video>
+  <canvas id="skeleton"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+  <script>
+
+    // ===== SCENE =====
+    let scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    let camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+    camera.position.z = 18;
+
+    let renderer = new THREE.WebGLRenderer({ antialias: true });
+    document.body.appendChild(renderer.domElement);
+
+    // ===== SKELETON SETUP =====
+    const skCanvas = document.getElementById("skeleton");
+    const skCtx = skCanvas.getContext("2d");
+
+    // ===== RESPONSIVE RESIZE =====
+    function resizeAll() {
+
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const dpr = Math.min(window.devicePixelRatio, 2);
+
+      // Three.js
+      renderer.setSize(width, height, false);
+      renderer.setPixelRatio(dpr);
+
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+
+      // Skeleton retina support
+      skCanvas.width = width * dpr;
+      skCanvas.height = height * dpr;
+      skCanvas.style.width = width + "px";
+      skCanvas.style.height = height + "px";
+
+      skCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    window.addEventListener("resize", resizeAll);
+    window.addEventListener("orientationchange", resizeAll);
+
+    // ===== BETTER HEART =====
+    function betterHeart() {
+      let heartShape = new THREE.Shape();
+      heartShape.moveTo(0, 5);
+      heartShape.bezierCurveTo(0, 5, -5, 0, -5, 0);
+      heartShape.bezierCurveTo(-5, -5, 0, -8, 0, -10);
+      heartShape.bezierCurveTo(0, -8, 5, -5, 5, 0);
+      heartShape.bezierCurveTo(5, 0, 0, 5, 0, 5);
+
+      let geo = new THREE.ExtrudeGeometry(heartShape, {
+        depth: 3,
+        bevelEnabled: true,
+        bevelSize: 0.5
+      });
+
+      geo.scale(0.4, 0.4, 0.4);
+      return geo;
+    }
+
+    // ===== SHAPES =====
+    let bases = [
+      new THREE.SphereGeometry(6, 128, 128),
+      new THREE.TorusKnotGeometry(4, 1.2, 300, 64),
+      new THREE.IcosahedronGeometry(6, 4),
+      new THREE.OctahedronGeometry(6, 4),
+      new THREE.TorusGeometry(5, 1.5, 120, 200),
+      new THREE.DodecahedronGeometry(6, 3),
+      new THREE.ConeGeometry(5, 10, 128),
+      betterHeart()
+    ];
+
+    // ===== DENSE =====
+    function dense(baseGeo, count = 60000) {
+      let src = baseGeo.attributes.position;
+      let arr = [];
+      for (let i = 0; i < count; i++) {
+        let id = Math.floor(Math.random() * src.count);
+        arr.push(
+          src.getX(id),
+          src.getY(id),
+          src.getZ(id)
+        );
+      }
+      let g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3));
+      return g;
+    }
+
+    let shapeIndex = 0;
+
+    let material = new THREE.PointsMaterial({
+      size: 0.045,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false
+    });
+
+    let particles = new THREE.Points(
+      dense(bases[shapeIndex]),
+      material
+    );
+
+    scene.add(particles);
+
+    // ===== CHANGE SHAPE =====
+    function changeShape() {
+      shapeIndex = (shapeIndex + 1) % bases.length;
+      particles.geometry.dispose();
+      particles.geometry = dense(bases[shapeIndex]);
+    }
+
+    // ===== ANIMATE =====
+    let targetScale = 1;
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      particles.scale.lerp(
+        new THREE.Vector3(targetScale, targetScale, targetScale),
+        0.15
+      );
+
+      let t = Date.now() * 0.001;
+      material.color.setHSL((t * 0.2) % 1, 1, 0.6);
+
+      renderer.render(scene, camera);
+    }
+
+    resizeAll();
+    animate();
+
+    // ===== MEDIAPIPE =====
+    const video = document.getElementById("video");
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 0,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+
+    let wasTwo = false;
+
+    hands.onResults(results => {
+
+      skCtx.clearRect(0, 0, skCanvas.width, skCanvas.height);
+
+      if (!results.multiHandLandmarks.length) return;
+
+      const lm = results.multiHandLandmarks[0];
+
+      // ===== SKELETON =====
+      skCtx.strokeStyle = "white";
+      skCtx.lineWidth = 1.2;
+
+      const connections = [
+        [0, 1], [1, 2], [2, 3], [3, 4],
+        [0, 5], [5, 6], [6, 7], [7, 8],
+        [5, 9], [9, 10], [10, 11], [11, 12],
+        [9, 13], [13, 14], [14, 15], [15, 16],
+        [13, 17], [17, 18], [18, 19], [19, 20],
+        [0, 17]
+      ];
+
+      for (let c of connections) {
+        const a = lm[c[0]];
+        const b = lm[c[1]];
+
+        skCtx.beginPath();
+        skCtx.moveTo((1 - a.x) * window.innerWidth, a.y * window.innerHeight);
+        skCtx.lineTo((1 - b.x) * window.innerWidth, b.y * window.innerHeight);
+        skCtx.stroke();
+      }
+
+      // ===== ROTATION =====
+      const x = (1 - lm[8].x) - 0.5;
+      const y = lm[8].y - 0.5;
+
+      particles.rotation.y += (x * 4 - particles.rotation.y) * 0.2;
+      particles.rotation.x += (y * 4 - particles.rotation.x) * 0.2;
+
+      // ===== PINCH SCALE =====
+      let dx = lm[4].x - lm[8].x;
+      let dy = lm[4].y - lm[8].y;
+      let dist = Math.sqrt(dx * dx + dy * dy);
+
+      targetScale = 1 + (0.3 - dist) * 5;
+      targetScale = Math.max(0.5, Math.min(2.5, targetScale));
+
+      // ===== TWO FINGER SHAPE CHANGE =====
+      let indexUp = lm[8].y < lm[6].y;
+      let middleUp = lm[12].y < lm[10].y;
+      let ringUp = lm[16].y < lm[14].y;
+      let pinkyUp = lm[20].y < lm[18].y;
+
+      let two = indexUp && middleUp && !ringUp && !pinkyUp;
+
+      if (two && !wasTwo) {
+        changeShape();
+      }
+
+      wasTwo = two;
+    });
+
+    const cam = new Camera(video, {
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: window.innerWidth,
+      height: window.innerHeight
+    });
+
+    cam.start();
+
+  </script>
+
+</body>
+
+</html>
